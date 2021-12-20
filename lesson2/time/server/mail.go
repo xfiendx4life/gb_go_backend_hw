@@ -118,12 +118,21 @@ func handleConn(ctx context.Context, c net.Conn, wg *sync.WaitGroup, messageChan
 
 		select {
 		case <-ctx.Done():
-			io.WriteString(c, "Bye!")
+			_, err := io.WriteString(c, "Bye!")
+			if err != nil {
+				log.Println(err)
+			}
 			return
 		case now := <-t.C:
-			io.WriteString(c, now.Format("15:04:05\n\r"))
+			_, err := io.WriteString(c, now.Format("15:04:05\n\r"))
+			if err != nil {
+				log.Println(err)
+			}
 		case message := <-messageChan:
-			io.WriteString(c, message)
+			_, err := io.WriteString(c, message)
+			if err != nil {
+				log.Println(err)
+			}
 		}
 	}
 }

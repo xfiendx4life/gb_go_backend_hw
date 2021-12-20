@@ -2,6 +2,7 @@ package main
 
 import (
 	"io"
+	"log"
 	"net"
 	"os"
 )
@@ -15,6 +16,9 @@ func main() {
 
 	//buf := make([]byte, 256)
 	for {
-		io.Copy(os.Stdout, conn)
+		_, err := io.Copy(os.Stdout, conn)
+		if err != nil {
+			log.Println(err)
+		}
 	}
 }
