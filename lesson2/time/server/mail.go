@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"io"
 	"log"
 	"net"
+	"os"
 	"os/signal"
 	"sync"
 	"syscall"
@@ -44,6 +46,40 @@ func (s Server) Start() {
 	}
 }
 
+func pipeMessage(ctx context.Context, messageChan chan string) {
+	select {
+	case <-ctx.Done():
+		log.Println("Stop messenger")
+		return
+	default:
+		for {
+			sc := bufio.NewScanner(os.Stdin)
+			sc.Scan()
+			messageChan <- sc.Text() + "\n"
+		}
+	}
+}
+
+func sendToChan(chans []chan string, message string) {
+	for i := range chans {
+		chans[i] <- message
+	}
+}
+
+func broker(ctx context.Context, chanChan chan chan string, messageMain chan string) {
+	chans := make([]chan string, 0)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case message := <-messageMain:
+			sendToChan(chans, message)
+		case newChan := <-chanChan:
+			chans = append(chans, newChan)
+		}
+	}
+}
+
 func main() {
 	srv := NewServer(":8001")
 	go srv.Start()
@@ -51,7 +87,10 @@ func main() {
 	ctx, _ := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 
 	wg := sync.WaitGroup{}
-
+	messageMain := make(chan string)
+	channels := make(chan chan string)
+	go pipeMessage(ctx, messageMain)
+	go broker(ctx, channels, messageMain)
 	for {
 		select {
 		case <-ctx.Done():
@@ -61,12 +100,14 @@ func main() {
 			return
 		case conn := <-srv.Connections:
 			wg.Add(1)
-			go handleConn(ctx, conn, &wg)
+			messageChan := make(chan string)
+			channels <- messageChan
+			go handleConn(ctx, conn, &wg, messageChan)
 		}
 	}
 }
 
-func handleConn(ctx context.Context, c net.Conn, wg *sync.WaitGroup) {
+func handleConn(ctx context.Context, c net.Conn, wg *sync.WaitGroup, messageChan chan string) {
 	defer func() {
 		wg.Done()
 		c.Close()
@@ -81,6 +122,8 @@ func handleConn(ctx context.Context, c net.Conn, wg *sync.WaitGroup) {
 			return
 		case now := <-t.C:
 			io.WriteString(c, now.Format("15:04:05\n\r"))
+		case message := <-messageChan:
+			io.WriteString(c, message)
 		}
 	}
 }
