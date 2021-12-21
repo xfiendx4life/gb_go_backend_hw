@@ -9,13 +9,7 @@ import (
 
 type client chan<- string
 
-var (
-	entering = make(chan client)
-	leaving  = make(chan client)
-	messages = make(chan string)
-)
-
-func broadcaster() {
+func broadcaster(messages chan string, leaving chan client, entering chan client) {
 	clients := make(map[client]bool)
 	for {
 		select {
@@ -34,16 +28,21 @@ func broadcaster() {
 	}
 }
 
-func handleConn(conn net.Conn) {
+func handleConn(conn net.Conn, messages chan string, leaving chan client, entering chan client) {
 	ch := make(chan string)
 	go clientWriter(conn, ch)
 
-	who := conn.RemoteAddr().String()
-	ch <- "You are " + who
+	// who := conn.RemoteAddr().String()
+	ch <- "Who are you?"
+	input := bufio.NewScanner(conn)
+	var who string
+	if input.Scan() {
+		who = input.Text()
+	}
 	messages <- who + " has arrived"
 	entering <- ch
 
-	input := bufio.NewScanner(conn)
+	// input := bufio.NewScanner(conn)
 	for input.Scan() {
 		messages <- who + ": " + input.Text()
 	}
@@ -59,18 +58,21 @@ func clientWriter(conn net.Conn, ch <-chan string) {
 }
 
 func main() {
-	listener, err := net.Listen("tcp", ":8001")
+	listener, err := net.Listen("tcp", ":8002")
 	if err != nil {
 		log.Fatal(err)
 	}
+	entering := make(chan client)
+	leaving := make(chan client)
+	messages := make(chan string)
 
-	go broadcaster()
+	go broadcaster(messages, leaving, entering)
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
 			log.Print(err)
 			continue
 		}
-		go handleConn(conn)
+		go handleConn(conn, messages, leaving, entering)
 	}
 }
