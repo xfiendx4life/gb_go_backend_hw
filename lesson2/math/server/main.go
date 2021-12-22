@@ -2,19 +2,15 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"log"
 	"net"
-	"sync"
+	"strings"
 
 	"github.com/v-lozhkin/backendOneLessons/lesson2/math/mathmaker"
 )
 
-type scoreTable struct {
-	score map[string]int
-	mu    sync.Mutex
-}
+type score map[string]int
 
 type client chan<- string
 
@@ -25,27 +21,38 @@ func generateEquation() (mm mathmaker.Mathmaker, eq string) {
 	return
 }
 
-func solve(ctx context.Context, attempt chan string, res chan bool, mm chan mathmaker.Mathmaker) {
-	// var m mathmaker.Mathmaker
-	// подумать, как получить эту штуку и обработать
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		// case at := <-attempt:
-		// 	res <- at == mm.GetEquationResult()
-		}
+func shareToClients(clients map[client]bool, msg string) {
+	for cli := range clients {
+		cli <- msg
 	}
+}
+
+func scorePrep(sc score) string {
+	table := "Score:\n"
+	for k, v := range sc {
+		table += fmt.Sprintf("%s: %d\n", k, v)
+	}
+	return table
 }
 
 func broadcaster(messages chan string, leaving chan client, entering chan client) {
 	clients := make(map[client]bool)
-
+	mm, eq := generateEquation()
+	sc := make(score)
 	for {
 		select {
 		case msg := <-messages:
-			for cli := range clients {
-				cli <- msg
+			shareToClients(clients, msg)
+			if strings.HasSuffix(msg, "has arrived") {
+				shareToClients(clients, fmt.Sprintf("Solve this:\n %s", eq))
+				log.Println(mm.GetEquationResult())
+			}
+			if strings.Contains(msg, ":") && strings.Split(msg, ": ")[1] == mm.GetEquationResult() {
+				mm, eq = generateEquation()
+				user := strings.Split(msg, ":")[0]
+				sc[user] += 1
+				shareToClients(clients, fmt.Sprintf("User %s won this round,\n%s\nthe next one is:\n %s", user, scorePrep(sc), eq))
+				log.Println(mm.GetEquationResult())
 			}
 
 		case cli := <-entering:
@@ -69,8 +76,8 @@ func handleConn(conn net.Conn, messages chan string, leaving chan client, enteri
 	if input.Scan() {
 		who = input.Text()
 	}
-	messages <- who + " has arrived"
 	entering <- ch
+	messages <- who + " has arrived"
 
 	// input := bufio.NewScanner(conn)
 	for input.Scan() {
