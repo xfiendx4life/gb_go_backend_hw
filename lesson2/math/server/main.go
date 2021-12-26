@@ -5,17 +5,54 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
+
+	"github.com/v-lozhkin/backendOneLessons/lesson2/math/mathmaker"
 )
+
+type score map[string]int
 
 type client chan<- string
 
+func generateEquation() (mm mathmaker.Mathmaker, eq string) {
+	ops := mathmaker.CreateDefaultOperations()
+	mm = mathmaker.NewMathmaker()
+	eq = mm.MakeMathEquation(ops)
+	return
+}
+
+func shareToClients(clients map[client]bool, msg string) {
+	for cli := range clients {
+		cli <- msg
+	}
+}
+
+func scorePrep(sc score) string {
+	table := "Score:\n"
+	for k, v := range sc {
+		table += fmt.Sprintf("%s: %d\n", k, v)
+	}
+	return table
+}
+
 func broadcaster(messages chan string, leaving chan client, entering chan client) {
 	clients := make(map[client]bool)
+	mm, eq := generateEquation()
+	sc := make(score)
 	for {
 		select {
 		case msg := <-messages:
-			for cli := range clients {
-				cli <- msg
+			shareToClients(clients, msg)
+			if strings.HasSuffix(msg, "has arrived") {
+				shareToClients(clients, fmt.Sprintf("Solve this:\n %s", eq))
+				log.Println(mm.GetEquationResult())
+			}
+			if strings.Contains(msg, ":") && strings.Split(msg, ": ")[1] == mm.GetEquationResult() {
+				mm, eq = generateEquation()
+				user := strings.Split(msg, ":")[0]
+				sc[user] += 1
+				shareToClients(clients, fmt.Sprintf("User %s won this round,\n%s\nthe next one is:\n %s", user, scorePrep(sc), eq))
+				log.Println(mm.GetEquationResult())
 			}
 
 		case cli := <-entering:
@@ -29,12 +66,6 @@ func broadcaster(messages chan string, leaving chan client, entering chan client
 }
 
 func handleConn(conn net.Conn, messages chan string, leaving chan client, entering chan client) {
-	defer func() {
-		err := conn.Close()
-		if err != nil {
-			log.Printf("can't close connection %s", err)
-		}
-	}()
 	ch := make(chan string)
 	go clientWriter(conn, ch)
 
@@ -45,14 +76,16 @@ func handleConn(conn net.Conn, messages chan string, leaving chan client, enteri
 	if input.Scan() {
 		who = input.Text()
 	}
-	messages <- who + " has arrived"
 	entering <- ch
+	messages <- who + " has arrived"
 
+	// input := bufio.NewScanner(conn)
 	for input.Scan() {
 		messages <- who + ": " + input.Text()
 	}
 	leaving <- ch
 	messages <- who + " has left"
+	conn.Close()
 }
 
 func clientWriter(conn net.Conn, ch <-chan string) {
