@@ -29,6 +29,12 @@ func broadcaster(messages chan string, leaving chan client, entering chan client
 }
 
 func handleConn(conn net.Conn, messages chan string, leaving chan client, entering chan client) {
+	defer func() {
+		err := conn.Close()
+		if err != nil {
+			log.Printf("can't close connection %s", err)
+		}
+	}()
 	ch := make(chan string)
 	go clientWriter(conn, ch)
 
@@ -42,13 +48,11 @@ func handleConn(conn net.Conn, messages chan string, leaving chan client, enteri
 	messages <- who + " has arrived"
 	entering <- ch
 
-	// input := bufio.NewScanner(conn)
 	for input.Scan() {
 		messages <- who + ": " + input.Text()
 	}
 	leaving <- ch
 	messages <- who + " has left"
-	conn.Close()
 }
 
 func clientWriter(conn net.Conn, ch <-chan string) {

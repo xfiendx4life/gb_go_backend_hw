@@ -19,7 +19,7 @@ type Server struct {
 }
 
 func NewServer(address string) Server {
-	lister, err := net.Listen("tcp", ":8001")
+	lister, err := net.Listen("tcp", address)
 	if err != nil {
 		panic(err)
 	}
