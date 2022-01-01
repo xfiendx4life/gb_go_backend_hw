@@ -52,7 +52,7 @@ func (uh *UploadHandler) HandleGetFiles(ctx context.Context, r *http.Request, ex
 	if err != nil {
 		return nil, fmt.Errorf("can't open dir %s", err)
 	}
-	files := make([]*fileInfo, 0)
+	files := make([]fileInfo, 0)
 	fis := fileInfo{}
 	for _, f := range dir {
 		fis.Name = f.Name()
@@ -62,7 +62,9 @@ func (uh *UploadHandler) HandleGetFiles(ctx context.Context, r *http.Request, ex
 			log.Printf("error while reading file: %s\n", err)
 		}
 		fis.Size = info.Size()
-		files = append(files, &fis)
+		if ext == "" || ext == fis.Extension {
+			files = append(files, fis)
+		}
 	}
 	// add filter
 	js, err := json.Marshal(files)
