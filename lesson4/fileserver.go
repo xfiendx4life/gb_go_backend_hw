@@ -27,17 +27,9 @@ func (uh *UploadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var response []byte
 	var err error
 	ext := r.FormValue("ext")
-	switch ext {
-	case "":
-		response, err = uh.HandleGetFiles(ctx, r, "")
-		if err != nil {
-			http.Error(w, "can't handle request: "+err.Error(), http.StatusInternalServerError)
-		}
-	default:
-		response, err = uh.HandleGetFiles(ctx, r, ext)
-		if err != nil {
-			http.Error(w, "can't handle request: "+err.Error(), http.StatusInternalServerError)
-		}
+	response, err = uh.HandleGetFiles(ctx, r, ext)
+	if err != nil {
+		http.Error(w, "can't handle request: "+err.Error(), http.StatusInternalServerError)
 	}
 	w.Header().Add("Content-Type", "application/json")
 	_, err = w.Write(response)
